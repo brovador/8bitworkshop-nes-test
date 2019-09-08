@@ -14,7 +14,8 @@ Finally, turn on the PPU to display video.
 // link the pattern table into CHR ROM
 //#link "chr_generic.s"
 
-// main function, run after console reset
+#include "level.h"
+
 static unsigned char VRAM_BUFFER[32];
 
 static unsigned char pad;
@@ -22,14 +23,53 @@ static unsigned char state = STATE_START;
 
 void nmi_handler()
 {
-  set_vram_update(VRAM_BUFFER);
-  //scroll(x, 0);
+  if (VRAM_BUFFER[0] != 0) {
+    set_vram_update(VRAM_BUFFER);
+  }
+}
+
+
+void load_screen()
+{  
+  unsigned char brightness = 0;
+  ppu_off();
+  
+  vram_adr(NAMETABLE_A);
+  vram_write(level_nam, 1024);
+  
+  //Disable nmi drawing
+  VRAM_BUFFER[0] = 0;
+  
+  pal_col(0,0x02);
+  pal_col(1,0x14);
+  pal_col(2,0x20);
+  pal_col(3,0x30);
+  pal_bg_bright(0);
+  
+  ppu_on_all();
+  
+  while(brightness < 8) {
+    if (nesclock() % 2 == 0) {
+      brightness++;
+    }
+    pal_bg_bright(brightness);
+    ppu_wait_nmi();
+  }
+	  
+  while(brightness > 4) {
+    if (nesclock() % 2 == 0) {
+      brightness--;
+    }
+    pal_bg_bright(brightness);
+    ppu_wait_nmi();
+  }
 }
 
 
 void state_start_loop()
 {
-  //State enter
+  load_screen();
+  
   VRAM_BUFFER[0] = MSB(NTADR_A(2, 2));
   VRAM_BUFFER[1] = LSB(NTADR_A(2, 2));
   VRAM_BUFFER[2] = 'S';
@@ -53,14 +93,13 @@ void state_start_loop()
       break;
     }
   }
-  
-  //State exit
-  //TODO...
 }
 
 
 void state_game_loop()
 {
+  load_screen();
+  
   //State enter
   VRAM_BUFFER[0] = MSB(NTADR_A(2, 2));
   VRAM_BUFFER[1] = LSB(NTADR_A(2, 2));
@@ -84,11 +123,7 @@ void state_game_loop()
 
 
 void main(void) {
-  pal_col(0,0x02);	// set screen to dark blue
-  pal_col(1,0x14);	// fuchsia
-  pal_col(2,0x20);	// grey
-  pal_col(3,0x30);	// white
-
+  
   nmi_set_callback(nmi_handler);
   ppu_on_all();
   
