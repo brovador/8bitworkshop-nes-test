@@ -1,86 +1,73 @@
-
-/*
-A simple "hello world" example.
-Set the screen background color and palette colors.
-Then write a message to the nametable.
-Finally, turn on the PPU to display video.
-*/
-
 #include "neslib.h"
+
+//#link "chr_generic.s"
+
+#include "screen_start.h"
+#include "screen_game.h"
 
 #define STATE_START 0
 #define STATE_GAME  1
 
-// link the pattern table into CHR ROM
-//#link "chr_generic.s"
-
-#include "level.h"
-
-static unsigned char VRAM_BUFFER[32];
-
-static unsigned char pad;
 static unsigned char state = STATE_START;
+
+//strings
+#define STR_LEN_PRESS_START 13
+static char* str_pressstart = "PRESS START";
+
+//game vars
+static unsigned char VRAM_BUFFER_FLAGS = 0x00;
+static unsigned char VRAM_BUFFER[32];
+static unsigned char pad;
+static unsigned char i, j;
 
 void nmi_handler()
 {
-  if (VRAM_BUFFER[0] != 0) {
+  if (VRAM_BUFFER_FLAGS != 0x00) {
     set_vram_update(VRAM_BUFFER);
   }
 }
 
 
-void load_screen()
-{  
-  unsigned char brightness = 0;
+void load_screen(const unsigned char* data)
+{
+  //Disable vram NMI update
+  VRAM_BUFFER_FLAGS = 0x00;
+  ppu_wait_nmi();
+
   ppu_off();
   
   vram_adr(NAMETABLE_A);
-  vram_write(level_nam, 1024);
-  
-  //Disable nmi drawing
-  VRAM_BUFFER[0] = 0;
+  vram_unrle(data);
   
   pal_col(0,0x02);
   pal_col(1,0x14);
   pal_col(2,0x20);
   pal_col(3,0x30);
-  pal_bg_bright(0);
   
   ppu_on_all();
-  
-  while(brightness < 8) {
-    if (nesclock() % 2 == 0) {
-      brightness++;
-    }
-    pal_bg_bright(brightness);
-    ppu_wait_nmi();
-  }
-	  
-  while(brightness > 4) {
-    if (nesclock() % 2 == 0) {
-      brightness--;
-    }
-    pal_bg_bright(brightness);
-    ppu_wait_nmi();
-  }
 }
 
 
 void state_start_loop()
 {
-  load_screen();
-  
-  VRAM_BUFFER[0] = MSB(NTADR_A(2, 2));
-  VRAM_BUFFER[1] = LSB(NTADR_A(2, 2));
-  VRAM_BUFFER[2] = 'S';
-  VRAM_BUFFER[3] = NT_UPD_EOF;
+  //State start
+  load_screen(screen_start);
+  VRAM_BUFFER_FLAGS = 0x01;
+  VRAM_BUFFER[0] = MSB(NTADR_A(10, 20))|NT_UPD_HORZ;
+  VRAM_BUFFER[1] = LSB(NTADR_A(10, 20));
+  VRAM_BUFFER[2] = STR_LEN_PRESS_START;
+  VRAM_BUFFER[3 + STR_LEN_PRESS_START] = NT_UPD_EOF;
+  j = 0;
   
   //State update
   while(1) {
     
     //Logic suff
-    if (nesclock() % 30 == 0) {
-      VRAM_BUFFER[2] = VRAM_BUFFER[2] == 'S' ? ' ' : 'S';
+    if (nesclock() % 32 == 0) {
+      j += 1;
+      for (i = 0; i < STR_LEN_PRESS_START; i++) {
+        VRAM_BUFFER[3 + i] = (j % 2) ? str_pressstart[i] : ' ';
+      }
     }
     
     //nmi sync
@@ -93,18 +80,17 @@ void state_start_loop()
       break;
     }
   }
+  
+  //State exit
+  for (i = 0; i < STR_LEN_PRESS_START; i++) {
+    VRAM_BUFFER[3 + i] = ' ';
+  }
 }
 
 
 void state_game_loop()
 {
-  load_screen();
-  
-  //State enter
-  VRAM_BUFFER[0] = MSB(NTADR_A(2, 2));
-  VRAM_BUFFER[1] = LSB(NTADR_A(2, 2));
-  VRAM_BUFFER[2] = 'G';
-  VRAM_BUFFER[3] = NT_UPD_EOF;
+  load_screen(screen_game);
   
   while(1) {
     
@@ -115,12 +101,16 @@ void state_game_loop()
     ppu_wait_nmi();
     
     //Read pad
+    pad = pad_trigger(0);
+    if (pad & PAD_START) {
+      state = STATE_START;
+      break;
+    }
   }
   
   //State exit
   //TODO
 }
-
 
 void main(void) {
   
