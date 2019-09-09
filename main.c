@@ -5,9 +5,9 @@
 #include "screen_start.h"
 #include "screen_game.h"
 
+//states
 #define STATE_START 0
 #define STATE_GAME  1
-
 static unsigned char state = STATE_START;
 
 //strings
@@ -15,10 +15,17 @@ static unsigned char state = STATE_START;
 static char* str_pressstart = "PRESS START";
 
 //game vars
+#define STR_LEN_SCORE 4
+#define STR_LEN_LEVEL 2
 static unsigned char VRAM_BUFFER_FLAGS = 0x00;
 static unsigned char VRAM_BUFFER[32];
 static unsigned char pad;
-static unsigned char i, j;
+static unsigned int i, j, k;
+static unsigned int score;
+static unsigned char level;
+
+//utils
+#define INT_TO_CHR(_X) 0x30 + _X
 
 void nmi_handler()
 {
@@ -56,6 +63,9 @@ void state_start_loop()
   VRAM_BUFFER[0] = MSB(NTADR_A(10, 20))|NT_UPD_HORZ;
   VRAM_BUFFER[1] = LSB(NTADR_A(10, 20));
   VRAM_BUFFER[2] = STR_LEN_PRESS_START;
+  for (i = 0; i < STR_LEN_PRESS_START; i++) {
+    VRAM_BUFFER[3 + i] = str_pressstart[i];
+  }
   VRAM_BUFFER[3 + STR_LEN_PRESS_START] = NT_UPD_EOF;
   j = 0;
   
@@ -82,20 +92,47 @@ void state_start_loop()
   }
   
   //State exit
+  /*
   for (i = 0; i < STR_LEN_PRESS_START; i++) {
     VRAM_BUFFER[3 + i] = ' ';
   }
+  */
 }
 
 
 void state_game_loop()
 {
   load_screen(screen_game);
+  VRAM_BUFFER_FLAGS = 0x01;
+  score = 0;
+  level = 0;
   
   while(1) {
     
     //State logic
-    //TODO
+    
+    //VRAM udpate - score
+    k = 0;
+    VRAM_BUFFER[k] = MSB(NTADR_A(21, 3))|NT_UPD_HORZ;
+    VRAM_BUFFER[k + 1] = LSB(NTADR_A(21, 3));
+    VRAM_BUFFER[k + 2] = STR_LEN_SCORE;
+    i = score;
+    for (j = STR_LEN_SCORE; j > 0; j--) {
+      VRAM_BUFFER[k + 3 + j - 1] = INT_TO_CHR(i % 10);
+      i = i / 10;
+    }
+    
+    //VRAM udpate - level
+    k = k + 3 + STR_LEN_SCORE;
+    VRAM_BUFFER[k] = MSB(NTADR_A(18, 24))|NT_UPD_HORZ;
+    VRAM_BUFFER[k + 1] = LSB(NTADR_A(18, 24));
+    VRAM_BUFFER[k + 2] = STR_LEN_LEVEL;
+    i = level;
+    for (j = STR_LEN_LEVEL; j > 0; j--) {
+      VRAM_BUFFER[k + 3 + j - 1] = INT_TO_CHR(i % 10);
+      i = i / 10;
+    }
+    VRAM_BUFFER[k + 3 + STR_LEN_LEVEL] = NT_UPD_EOF;
     
     //nmi sync
     ppu_wait_nmi();
@@ -116,6 +153,8 @@ void main(void) {
   
   nmi_set_callback(nmi_handler);
   ppu_on_all();
+  
+  state = STATE_START;
   
   // infinite loop
   while (1) {
