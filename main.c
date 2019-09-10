@@ -17,7 +17,10 @@ static char* str_pressstart = "PRESS START";
 //game vars
 #define STR_LEN_SCORE 4
 #define STR_LEN_LEVEL 2
-static unsigned char VRAM_BUFFER_FLAGS = 0x00;
+
+#define VRAM_FLAGS_DRAW 0x01
+#define VRAM_FLAGS_CLEAR 0x00
+static unsigned char vram_buffer_flags = VRAM_FLAGS_CLEAR;
 static unsigned char VRAM_BUFFER[32];
 static unsigned char pad;
 static unsigned int i, j, k;
@@ -29,8 +32,11 @@ static unsigned char level;
 
 void nmi_handler()
 {
-  if (VRAM_BUFFER_FLAGS != 0x00) {
+  if (vram_buffer_flags == VRAM_FLAGS_DRAW) {
+    vram_buffer_flags = VRAM_FLAGS_CLEAR;
     set_vram_update(VRAM_BUFFER);
+  } else {
+    set_vram_update(NULL);
   }
 }
 
@@ -38,8 +44,8 @@ void nmi_handler()
 void load_screen(const unsigned char* data)
 {
   //Disable vram NMI update
-  VRAM_BUFFER_FLAGS = 0x00;
-  ppu_wait_nmi();
+  //vram_buffer_flags = VRAM_FLAGS_CLEAR;
+  //ppu_wait_nmi();
 
   ppu_off();
   
@@ -59,7 +65,6 @@ void state_start_loop()
 {
   //State start
   load_screen(screen_start);
-  VRAM_BUFFER_FLAGS = 0x01;
   VRAM_BUFFER[0] = MSB(NTADR_A(10, 20))|NT_UPD_HORZ;
   VRAM_BUFFER[1] = LSB(NTADR_A(10, 20));
   VRAM_BUFFER[2] = STR_LEN_PRESS_START;
@@ -67,6 +72,7 @@ void state_start_loop()
     VRAM_BUFFER[3 + i] = str_pressstart[i];
   }
   VRAM_BUFFER[3 + STR_LEN_PRESS_START] = NT_UPD_EOF;
+  vram_buffer_flags = VRAM_FLAGS_DRAW;
   j = 0;
   
   //State update
@@ -78,6 +84,7 @@ void state_start_loop()
       for (i = 0; i < STR_LEN_PRESS_START; i++) {
         VRAM_BUFFER[3 + i] = (j % 2) ? str_pressstart[i] : ' ';
       }
+      vram_buffer_flags = VRAM_FLAGS_DRAW;
     }
     
     //nmi sync
@@ -90,49 +97,48 @@ void state_start_loop()
       break;
     }
   }
-  
-  //State exit
-  /*
-  for (i = 0; i < STR_LEN_PRESS_START; i++) {
-    VRAM_BUFFER[3 + i] = ' ';
-  }
-  */
 }
 
 
 void state_game_loop()
 {
   load_screen(screen_game);
-  VRAM_BUFFER_FLAGS = 0x01;
-  score = 0;
-  level = 0;
+  score = 0000;
+  level = 00;
   
   while(1) {
     
     //State logic
     
-    //VRAM udpate - score
-    k = 0;
-    VRAM_BUFFER[k] = MSB(NTADR_A(21, 3))|NT_UPD_HORZ;
-    VRAM_BUFFER[k + 1] = LSB(NTADR_A(21, 3));
-    VRAM_BUFFER[k + 2] = STR_LEN_SCORE;
-    i = score;
-    for (j = STR_LEN_SCORE; j > 0; j--) {
-      VRAM_BUFFER[k + 3 + j - 1] = INT_TO_CHR(i % 10);
-      i = i / 10;
+    
+    /* VRAM BUFFER UPDATE */
+    k = 0; //VRAM buffer idx
+    
+    //TODO: check flag score updated
+    if (TRUE) {
+      VRAM_BUFFER[k] = MSB(NTADR_A(21, 3))|NT_UPD_HORZ;
+      VRAM_BUFFER[k + 1] = LSB(NTADR_A(21, 3));
+      VRAM_BUFFER[k + 2] = STR_LEN_SCORE;
+      i = score;
+      for (j = STR_LEN_SCORE; j > 0; j--) {
+        VRAM_BUFFER[k + 3 + j - 1] = INT_TO_CHR(i % 10);
+        i = i / 10;
+      }
+      k = k + 3 + STR_LEN_SCORE;
     }
     
-    //VRAM udpate - level
-    k = k + 3 + STR_LEN_SCORE;
-    VRAM_BUFFER[k] = MSB(NTADR_A(18, 24))|NT_UPD_HORZ;
-    VRAM_BUFFER[k + 1] = LSB(NTADR_A(18, 24));
-    VRAM_BUFFER[k + 2] = STR_LEN_LEVEL;
-    i = level;
-    for (j = STR_LEN_LEVEL; j > 0; j--) {
-      VRAM_BUFFER[k + 3 + j - 1] = INT_TO_CHR(i % 10);
-      i = i / 10;
+    //TODO: check flag level udpated
+    if (TRUE) {
+       //VRAM udpate - level
+      VRAM_BUFFER[k] = MSB(NTADR_A(18, 24))|NT_UPD_HORZ;
+      VRAM_BUFFER[k + 1] = LSB(NTADR_A(18, 24));
+      VRAM_BUFFER[k + 2] = STR_LEN_LEVEL;
+      VRAM_BUFFER[k + 3] = INT_TO_CHR(level / 10);
+      VRAM_BUFFER[k + 4] = INT_TO_CHR(level % 10);
+      VRAM_BUFFER[k + 5] = NT_UPD_EOF;
+      vram_buffer_flags = VRAM_FLAGS_DRAW;
     }
-    VRAM_BUFFER[k + 3 + STR_LEN_LEVEL] = NT_UPD_EOF;
+    /* VRAM BUFFER UPDATE END */
     
     //nmi sync
     ppu_wait_nmi();
@@ -142,6 +148,10 @@ void state_game_loop()
     if (pad & PAD_START) {
       state = STATE_START;
       break;
+    } else if (pad & PAD_UP) {
+      score++;
+    } else if (pad & PAD_DOWN) {
+      score--;
     }
   }
   
@@ -154,7 +164,7 @@ void main(void) {
   nmi_set_callback(nmi_handler);
   ppu_on_all();
   
-  state = STATE_START;
+  state = STATE_GAME;
   
   // infinite loop
   while (1) {
