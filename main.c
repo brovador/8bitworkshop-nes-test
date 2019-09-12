@@ -7,6 +7,7 @@
 
 //System vars
 static unsigned char VRAM_BUFFER[32];
+static unsigned char oam_buffer;
 static unsigned char pad;
 
 //strings
@@ -50,8 +51,13 @@ static unsigned int score;
 static unsigned char level;
 static unsigned int i, j, k;
 
+#define SPRITE_SNAKE 0x01
+#define SPRITE_PILL  0x03
+
 //utils
 #define INT_TO_CHR(_X) 0x30 + _X
+#define BG_X_TO_SPRITE(_X) _X * 8
+#define BG_Y_TO_SPRITE(_Y) _Y * 8 - 1
 
 
 void nmi_handler()
@@ -121,6 +127,7 @@ void state_start_loop()
 
 void state_game_loop()
 {
+  char sx, sy;
   load_screen(screen_game);
   set_vram_update(VRAM_BUFFER);
   
@@ -134,14 +141,24 @@ void state_game_loop()
   snake_head[1] = SNAKE_SPAWN_Y;
   game_flags = GAME_FLAGS_CLEAR;
   
+  sx = 15;
+  sy = 10;
+  
   
   while(1) {
     
     /* LOGIC */
     
+    //Eat pill
+    if (snake_head[0] == sx && snake_head[1] == sy) {
+      game_flags |= GAME_FLAGS_GROW;
+      sx = -1;
+      sy = -1;
+    }
+    
     //Grow snake
     if (game_flags & GAME_FLAGS_GROW) {
-      game_flags = game_flags & ~GAME_FLAGS_GROW;
+      game_flags &= ~GAME_FLAGS_GROW;
       i = snake_size;
       snake_size = MIN(snake_size + 1, SNAKE_MAX_SIZE);
       if (i != snake_size) {
@@ -191,7 +208,7 @@ void state_game_loop()
     //VRAM update - snake head
     VRAM_BUFFER[k++] = MSB(NTADR_A(snake_head[0], snake_head[1]));
     VRAM_BUFFER[k++] = LSB(NTADR_A(snake_head[0], snake_head[1]));
-    VRAM_BUFFER[k++] = 0x01;
+    VRAM_BUFFER[k++] = SPRITE_SNAKE;
     
     //VRAM update - score
     VRAM_BUFFER[k++] = MSB(NTADR_A(21, 3))|NT_UPD_HORZ;
@@ -213,6 +230,10 @@ void state_game_loop()
     
     VRAM_BUFFER[k++] = NT_UPD_EOF;
     ppu_wait_nmi();
+    
+    //Sprites - pills
+    oam_buffer = 0;
+    oam_buffer = oam_spr(BG_X_TO_SPRITE(sx), BG_Y_TO_SPRITE(sy), SPRITE_PILL, 0, oam_buffer);
     
     /* INPUT */
     
