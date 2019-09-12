@@ -15,6 +15,8 @@ static unsigned char pad;
 static char* str_pressstart = "PRESS START";
 #define STR_LEN_GAME_OVER 9
 static char* str_gameover = "GAME OVER";
+#define STR_LEN_GAME_PAUSE 11
+static char* str_pause = "GAME PAUSED";
 
 //states
 #define STATE_START 	0
@@ -38,17 +40,17 @@ static unsigned char snake[SNAKE_MAX_SIZE][2];
 static unsigned char snake_clear_coords[2];
 static unsigned char snake_dx, snake_dy, snake_size;
 
-#define LEVEL_MAX 3
-#define LEVEL_SPEED level_speed[level]
-#define LEVEL_POINTS level_points[level]
-#define LEVEL_PILLS level_pills[level]
-static unsigned char level_speed[] = {10, 9, 8};
-static unsigned char level_points[] = {1, 2, 3};
-static unsigned char level_pills[] = {1, 2, 3};
+#define LEVEL_MAX 10
+#define LEVEL_SPEED  level_speed[level]
+#define LEVEL_PILLS  level + 1
+#define LEVEL_POINTS level + 1
+static unsigned char level_speed[] = {12, 11, 10, 9, 8, 
+                                      7 ,  6,  5, 4, 3};
 
 #define GAME_FLAGS_CLEAR 	0x00
 #define GAME_FLAGS_GROW  	0x01
 #define GAME_FLAGS_SPAWN_PILLS	0x02
+#define GAME_FLAGS_PAUSE	0x04
 static unsigned char game_flags = 0x00;
 static unsigned int score;
 static unsigned char pills[16][2];
@@ -137,7 +139,7 @@ void state_game_loop()
   
   //Game startup
   score = 0;
-  level = -1;
+  level = 0xFF;
   snake_dx = 1;
   snake_dy = 0;
   snake_size = 1;
@@ -149,75 +151,77 @@ void state_game_loop()
   
   
   while(1) {
-    
-    /* LOGIC */
-    
-    if (game_flags & GAME_FLAGS_SPAWN_PILLS) {
-      game_flags &= ~GAME_FLAGS_SPAWN_PILLS;
-      level++;
-      for (i = 0; i < LEVEL_PILLS; i++) {
-      	 pills[i][0] = (int)(LERP(LEVEL_X, LEVEL_X + LEVEL_SIZE, rand8() / 255));
-         pills[i][1] = (int)(LERP(LEVEL_Y, LEVEL_Y + LEVEL_SIZE, rand8() / 255));
-      }
-    }
-    
-    //Eat pill
-    for (i = 0; i < LEVEL_PILLS; i++) {
-      if (snake_head[0] == pills[i][0] && snake_head[1] == pills[i][1]) {
-        game_flags |= GAME_FLAGS_GROW;
-        pills[i][0] = 0xFF;
-        pills[i][1] = 0xFF;
-        break;
-      }
-    }
-    
-    //Grow snake
-    if (game_flags & GAME_FLAGS_GROW) {
-      game_flags &= ~GAME_FLAGS_GROW;
-      i = snake_size;
-      snake_size = MIN(snake_size + 1, SNAKE_MAX_SIZE);
-      if (i != snake_size) {
-        snake[snake_size - 1][0] = snake[snake_size - 2][0];
-        snake[snake_size - 1][1] = snake[snake_size - 2][1];
-      }
-      score += LEVEL_POINTS;
+       
+    if (!(game_flags & GAME_FLAGS_PAUSE)) {
       
-      game_flags |= GAME_FLAGS_SPAWN_PILLS;
+      /* LOGIC */
+      if (game_flags & GAME_FLAGS_SPAWN_PILLS) {
+        game_flags &= ~GAME_FLAGS_SPAWN_PILLS;
+        level = level != 0xFF ? MIN(level + 1, LEVEL_MAX) : 0;
+        for (i = 0; i < LEVEL_PILLS; i++) {
+           pills[i][0] = (int)(LERP(LEVEL_X, LEVEL_X + LEVEL_SIZE, rand8() / 255));
+           pills[i][1] = (int)(LERP(LEVEL_Y, LEVEL_Y + LEVEL_SIZE, rand8() / 255));
+        }
+      }
+
+      //Eat pill
       for (i = 0; i < LEVEL_PILLS; i++) {
-        if (pills[i][0] != 0xFF) {
-          game_flags &= ~GAME_FLAGS_SPAWN_PILLS;
+        if (snake_head[0] == pills[i][0] && snake_head[1] == pills[i][1]) {
+          game_flags |= GAME_FLAGS_GROW;
+          pills[i][0] = 0xFF;
+          pills[i][1] = 0xFF;
           break;
         }
       }
-    }
-    
-    //Move snake
-    if (nesclock() % LEVEL_SPEED == 0) {
-        snake_clear_coords[0] = snake[snake_size - 1][0];
-      	snake_clear_coords[1] = snake[snake_size - 1][1];
-      	for (i = snake_size - 1; i > 0; --i) {
-            snake[i][0] = snake[i-1][0];
-            snake[i][1] = snake[i-1][1];
+
+      //Grow snake
+      if (game_flags & GAME_FLAGS_GROW) {
+        game_flags &= ~GAME_FLAGS_GROW;
+        i = snake_size;
+        snake_size = MIN(snake_size + 1, SNAKE_MAX_SIZE);
+        if (i != snake_size) {
+          snake[snake_size - 1][0] = snake[snake_size - 2][0];
+          snake[snake_size - 1][1] = snake[snake_size - 2][1];
         }
-      	snake_head[0] += snake_dx;
-	snake_head[1] += snake_dy;
-    }
-    
-    //Game over check
-    i = 0;
-    i = i || (snake_head[0] < LEVEL_X);
-    i = i || (snake_head[0] > LEVEL_X + LEVEL_SIZE);
-    i = i || (snake_head[1] < LEVEL_Y);
-    i = i || (snake_head[1] > LEVEL_Y + LEVEL_SIZE);
-    for (j = 2; j < snake_size; j++) {
-        i = i || (snake[j][0] == snake_head[0] &&  snake[j][1] == snake_head[1]);
-        if (i != 0) {
+        score += LEVEL_POINTS;
+
+        game_flags |= GAME_FLAGS_SPAWN_PILLS;
+        for (i = 0; i < LEVEL_PILLS; i++) {
+          if (pills[i][0] != 0xFF) {
+            game_flags &= ~GAME_FLAGS_SPAWN_PILLS;
             break;
+          }
         }
-    }
-    if (i) {
-      state = STATE_GAME_OVER;
-      break;
+      }
+
+      //Move snake
+      if (nesclock() % LEVEL_SPEED == 0) {
+          snake_clear_coords[0] = snake[snake_size - 1][0];
+          snake_clear_coords[1] = snake[snake_size - 1][1];
+          for (i = snake_size - 1; i > 0; --i) {
+              snake[i][0] = snake[i-1][0];
+              snake[i][1] = snake[i-1][1];
+          }
+          snake_head[0] += snake_dx;
+          snake_head[1] += snake_dy;
+      }
+
+      //Game over check
+      i = 0;
+      i = i || (snake_head[0] < LEVEL_X);
+      i = i || (snake_head[0] > LEVEL_X + LEVEL_SIZE);
+      i = i || (snake_head[1] < LEVEL_Y);
+      i = i || (snake_head[1] > LEVEL_Y + LEVEL_SIZE);
+      for (j = 2; j < snake_size; j++) {
+          i = i || (snake[j][0] == snake_head[0] &&  snake[j][1] == snake_head[1]);
+          if (i != 0) {
+              break;
+          }
+      }
+      if (i) {
+        state = STATE_GAME_OVER;
+        break;
+      }
     }
     
     /* DRAW */
@@ -251,6 +255,13 @@ void state_game_loop()
     VRAM_BUFFER[k++] = INT_TO_CHR((level + 1) / 10);
     VRAM_BUFFER[k++] = INT_TO_CHR((level + 1) % 10);
     
+    //VRAM update - pause
+    VRAM_BUFFER[k++] = MSB(NTADR_A(11, 26))|NT_UPD_HORZ;
+    VRAM_BUFFER[k++] = LSB(NTADR_A(11, 26));
+    VRAM_BUFFER[k++] = STR_LEN_GAME_PAUSE;
+    for (i = 0; i < STR_LEN_GAME_PAUSE; i++) {
+      VRAM_BUFFER[k++] = (game_flags & GAME_FLAGS_PAUSE) ? str_pause[i] : 0x00;
+    }
     VRAM_BUFFER[k++] = NT_UPD_EOF;
     ppu_wait_nmi();
     
@@ -260,10 +271,10 @@ void state_game_loop()
     for (i = 0; i < LEVEL_PILLS; i++) {
       if (pills[i][0] == 0xFF) continue;
       oam_buffer = oam_spr(BG_X_TO_SPRITE(pills[i][0]), 
-                               BG_Y_TO_SPRITE(pills[i][1]), 
-                               SPRITE_PILL, 
-                               0, 
-                               oam_buffer);
+                           BG_Y_TO_SPRITE(pills[i][1]), 
+                           SPRITE_PILL, 
+                           0, 
+                           oam_buffer);
     }
     
     /* INPUT */
@@ -285,8 +296,11 @@ void state_game_loop()
       snake_dy = 0;
       snake_dx = 1;
     } else if (pad & PAD_START) {
-      state = STATE_GAME;
-      break;
+      if (game_flags & GAME_FLAGS_PAUSE) {
+        game_flags &= ~GAME_FLAGS_PAUSE;
+      } else {
+        game_flags |= GAME_FLAGS_PAUSE;
+      }
     }
   }
   
