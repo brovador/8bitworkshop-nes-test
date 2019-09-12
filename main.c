@@ -40,12 +40,14 @@ static unsigned char snake_dx, snake_dy, snake_size;
 
 #define LEVEL_MAX 3
 #define LEVEL_SPEED level_speed[level]
-static unsigned char level_speed[] = {8, 8, 4};
 #define LEVEL_POINTS level_points[level]
+#define LEVEL_PILLS 5
+static unsigned char level_speed[] = {8, 8, 4};
 static unsigned char level_points[] = {1, 2, 3};
 
 #define GAME_FLAGS_CLEAR 	0x00
 #define GAME_FLAGS_GROW  	0x01
+#define GAME_FLAGS_SPAWN_PILLS	0x02
 static unsigned char game_flags = 0x00;
 static unsigned int score;
 static unsigned char level;
@@ -127,33 +129,45 @@ void state_start_loop()
 
 void state_game_loop()
 {
-  char sx, sy;
+  char pills[LEVEL_PILLS][2];
+  
   load_screen(screen_game);
   set_vram_update(VRAM_BUFFER);
   
   //Game startup
   score = 0;
-  level = 0;
+  level = -1;
   snake_dx = 1;
   snake_dy = 0;
   snake_size = 1;
   snake_head[0] = SNAKE_SPAWN_X;
   snake_head[1] = SNAKE_SPAWN_Y;
-  game_flags = GAME_FLAGS_CLEAR;
   
-  sx = 15;
-  sy = 10;
+  game_flags = GAME_FLAGS_CLEAR;
+  game_flags |= GAME_FLAGS_SPAWN_PILLS;
   
   
   while(1) {
     
     /* LOGIC */
     
+    if (game_flags & GAME_FLAGS_SPAWN_PILLS) {
+      game_flags &= ~GAME_FLAGS_SPAWN_PILLS;
+      level++;
+      for (i = 0; i < LEVEL_PILLS; i++) {
+      	 pills[i][0] = LEVEL_X + i + 2;
+         pills[i][1] = LEVEL_Y + i + 2;
+      }
+    }
+    
     //Eat pill
-    if (snake_head[0] == sx && snake_head[1] == sy) {
-      game_flags |= GAME_FLAGS_GROW;
-      sx = -1;
-      sy = -1;
+    for (i = 0; i < LEVEL_PILLS; i++) {
+      if (snake_head[0] == pills[i][0] && snake_head[1] == pills[i][1]) {
+        game_flags |= GAME_FLAGS_GROW;
+        pills[i][0] = 0xFF;
+        pills[i][1] = 0xFF;
+        break;
+      }
     }
     
     //Grow snake
@@ -166,6 +180,14 @@ void state_game_loop()
         snake[snake_size - 1][1] = snake[snake_size - 2][1];
       }
       score += LEVEL_POINTS;
+      
+      game_flags |= GAME_FLAGS_SPAWN_PILLS;
+      for (i = 0; i < LEVEL_PILLS; i++) {
+        if (pills[i][0] != 0xFF) {
+          game_flags &= ~GAME_FLAGS_SPAWN_PILLS;
+          break;
+        }
+      }
     }
     
     //Move snake
@@ -225,15 +247,23 @@ void state_game_loop()
     VRAM_BUFFER[k++] = MSB(NTADR_A(18, 24))|NT_UPD_HORZ;
     VRAM_BUFFER[k++] = LSB(NTADR_A(18, 24));
     VRAM_BUFFER[k++] = STR_LEN_LEVEL;
-    VRAM_BUFFER[k++] = INT_TO_CHR(level / 10);
-    VRAM_BUFFER[k++] = INT_TO_CHR(level % 10);
+    VRAM_BUFFER[k++] = INT_TO_CHR((level + 1) / 10);
+    VRAM_BUFFER[k++] = INT_TO_CHR((level + 1) % 10);
     
     VRAM_BUFFER[k++] = NT_UPD_EOF;
     ppu_wait_nmi();
     
     //Sprites - pills
+    oam_clear();
     oam_buffer = 0;
-    oam_buffer = oam_spr(BG_X_TO_SPRITE(sx), BG_Y_TO_SPRITE(sy), SPRITE_PILL, 0, oam_buffer);
+    for (i = 0; i < LEVEL_PILLS; i++) {
+      if (pills[i][0] == 0xFF) continue;
+      oam_buffer = oam_spr(BG_X_TO_SPRITE(pills[i][0]), 
+                               BG_Y_TO_SPRITE(pills[i][1]), 
+                               SPRITE_PILL, 
+                               0, 
+                               oam_buffer);
+    }
     
     /* INPUT */
     
