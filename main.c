@@ -41,15 +41,17 @@ static unsigned char snake_dx, snake_dy, snake_size;
 #define LEVEL_MAX 3
 #define LEVEL_SPEED level_speed[level]
 #define LEVEL_POINTS level_points[level]
-#define LEVEL_PILLS 5
-static unsigned char level_speed[] = {8, 8, 4};
+#define LEVEL_PILLS level_pills[level]
+static unsigned char level_speed[] = {10, 9, 8};
 static unsigned char level_points[] = {1, 2, 3};
+static unsigned char level_pills[] = {1, 2, 3};
 
 #define GAME_FLAGS_CLEAR 	0x00
 #define GAME_FLAGS_GROW  	0x01
 #define GAME_FLAGS_SPAWN_PILLS	0x02
 static unsigned char game_flags = 0x00;
 static unsigned int score;
+static unsigned char pills[16][2];
 static unsigned char level;
 static unsigned int i, j, k;
 
@@ -57,6 +59,7 @@ static unsigned int i, j, k;
 #define SPRITE_PILL  0x03
 
 //utils
+#define LERP(_A, _B, _PCT) (_A + ((_B - _A) * _PCT))
 #define INT_TO_CHR(_X) 0x30 + _X
 #define BG_X_TO_SPRITE(_X) _X * 8
 #define BG_Y_TO_SPRITE(_Y) _Y * 8 - 1
@@ -129,8 +132,6 @@ void state_start_loop()
 
 void state_game_loop()
 {
-  char pills[LEVEL_PILLS][2];
-  
   load_screen(screen_game);
   set_vram_update(VRAM_BUFFER);
   
@@ -155,8 +156,8 @@ void state_game_loop()
       game_flags &= ~GAME_FLAGS_SPAWN_PILLS;
       level++;
       for (i = 0; i < LEVEL_PILLS; i++) {
-      	 pills[i][0] = LEVEL_X + i + 2;
-         pills[i][1] = LEVEL_Y + i + 2;
+      	 pills[i][0] = (int)(LERP(LEVEL_X, LEVEL_X + LEVEL_SIZE, rand8() / 255));
+         pills[i][1] = (int)(LERP(LEVEL_Y, LEVEL_Y + LEVEL_SIZE, rand8() / 255));
       }
     }
     
@@ -297,6 +298,7 @@ void state_game_loop()
 void state_game_over()
 {
   set_vram_update(VRAM_BUFFER);
+  oam_clear();
   
   k = 0;
   VRAM_BUFFER[k++] = MSB(NTADR_A(11, 18))|NT_UPD_HORZ;
