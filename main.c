@@ -18,6 +18,21 @@ static char* str_gameover = "GAME OVER";
 #define STR_LEN_GAME_PAUSE 11
 static char* str_pause = "GAME PAUSED";
 
+//Palettes
+const unsigned char sprites_pal[16] = {
+    0x20, 0x06, 0x38, 0x27,
+    0x0C, 0x19, 0x29, 0x39,
+    0x0C, 0x1C, 0x2C, 0x3C,
+    0x0C, 0x14, 0x24, 0x34
+};
+
+const unsigned char bg_pal[16] = {
+    0x0F, 0x0B, 0x21, 0x2A,
+    0x0C, 0x19, 0x29, 0x39,
+    0x0C, 0x1C, 0x2C, 0x3C,
+    0x0C, 0x14, 0x24, 0x34
+};
+
 //states
 #define STATE_START 	0
 #define STATE_GAME  	1
@@ -57,8 +72,9 @@ static unsigned char pills[16][2];
 static unsigned char level;
 static unsigned int i, j, k;
 
-#define SPRITE_SNAKE 0x01
-#define SPRITE_PILL  0x03
+#define SPRITE_SNAKE 0xC2
+#define SPRITE_PILL  0x18
+#define PILLS_PALLETTE 0
 
 //utils
 #define LERP(_A, _B, _PCT) (_A + ((_B - _A) * _PCT))
@@ -80,10 +96,14 @@ void load_screen(const unsigned char* data)
   vram_adr(NAMETABLE_A);
   vram_unrle(data);
   
+  /*
   pal_col(0,0x02);
   pal_col(1,0x14);
   pal_col(2,0x20);
   pal_col(3,0x30);
+  */
+  pal_spr(sprites_pal);
+  pal_bg(bg_pal);
   
   ppu_on_all();
 }
@@ -273,7 +293,7 @@ void state_game_loop()
       oam_buffer = oam_spr(BG_X_TO_SPRITE(pills[i][0]), 
                            BG_Y_TO_SPRITE(pills[i][1]), 
                            SPRITE_PILL, 
-                           0, 
+                           PILLS_PALLETTE, 
                            oam_buffer);
     }
     
